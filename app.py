@@ -6,10 +6,10 @@ import plotly.express as px
 from supabase import create_client, Client
 from datetime import datetime
 
-# 1. KONFIGURASI HALAMAN & TEMA VISUAL
+# 1. KONFIGURASI HALAMAN & TEMA VISUAL (NAVY BLUE)
 st.set_page_config(page_title="AMDK Sales Analytics Pro", page_icon="📊", layout="wide")
 
-# CSS untuk styling kartu metrik (Navy & White)
+# Styling kartu metrik agar lebih profesional
 st.markdown("""
     <style>
     .main { background-color: #F4F6F7; }
@@ -28,6 +28,7 @@ st.markdown("""
 @st.cache_resource
 def init_connection():
     try:
+        # Menggunakan kredensial project vejhntwveszqdjptgiua
         url = "https://vejhntwveszqdjptgiua.supabase.co"
         key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlamhudHd2ZXN6cWRqcHRnaXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNTA4NTUsImV4cCI6MjA4MTcyNjg1NX0.LiaMAVOLXmF2RU-qnNI2jzLypuKhcnb9LgMFC_uf-9E"
         return create_client(url, key)
@@ -36,25 +37,26 @@ def init_connection():
 
 supabase = init_connection()
 
-# 3. FUNGSI AMBIL DATA RIIL (Mapping Kolom Screenshot 405)
+# 3. FUNGSI AMBIL DATA (Mapping Kolom Sesuai Screenshot 405)
 @st.cache_data(ttl=60)
 def fetch_real_data():
     if supabase is None: return pd.DataFrame()
     try:
-        # Mengambil data dari tabel amdk_sales
+        # Menarik data dari tabel amdk_sales
         response = supabase.table("amdk_sales").select("*").execute()
         df = pd.DataFrame(response.data)
         
         if not df.empty:
-            # Pastikan tipe data numerik benar (Konversi dari database)
+            # KONVERSI TIPE DATA NUMERIK (Agar SUM bisa dihitung)
             df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
             df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
             df['total_sales_rp'] = pd.to_numeric(df['total_sales_rp'], errors='coerce')
             
-            # Jika tabel tidak memiliki kolom tanggal, buat kolom buatan untuk keperluan visualisasi
+            # Jika tabel tidak memiliki kolom tanggal, buat placeholder untuk kebutuhan sistem
             if 'transaction_date' not in df.columns:
                 df['transaction_date'] = datetime.now()
             
+            # Membersihkan baris yang datanya kosong pada kolom kunci
             return df.dropna(subset=['region', 'total_sales_rp', 'product_name'])
     except Exception as e:
         st.error(f"Gagal memproses data: {e}")
@@ -71,7 +73,7 @@ if not df_riil.empty:
     # --- BAGIAN KPI METRICS ---
     total_omzet = df_riil['total_sales_rp'].sum()
     total_unit = df_riil['quantity'].sum()
-    # Link ke Riset: Estimasi Profit untuk Kesejahteraan Keluarga [cite: 125, 345]
+    # Estimasi Profit untuk Kesejahteraan Keluarga (Prinsip Hifz al-Mal)
     estimasi_profit = total_omzet * 0.20
 
     m1, m2, m3 = st.columns(3)
@@ -84,12 +86,12 @@ if not df_riil.empty:
 
     st.markdown("---")
 
-    # --- BAGIAN GRAFIK ---
+    # --- BAGIAN GRAFIK (Solusi untuk Screenshot 408) ---
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
         st.subheader("📍 Distribusi Penjualan per Wilayah")
-        # Grafik Lingkaran (Donut Chart) menggunakan kolom 'region' riil
+        # Donut Chart menggunakan kolom 'region' riil (Jawa Timur, Bali, dll)
         fig_pie = px.pie(
             df_riil, 
             values='total_sales_rp', 
@@ -101,8 +103,8 @@ if not df_riil.empty:
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with col_right:
-        st.subheader("📦 Performa Produk (Berdasarkan Omzet)")
-        # Grafik Batang Horizontal menggunakan kolom 'product_name' riil
+        st.subheader("📦 Performa Produk (Omzet)")
+        # Bar Chart menggunakan kolom 'product_name' riil (Prima, Bisto, Cheers, dll)
         df_prod = df_riil.groupby('product_name')['total_sales_rp'].sum().reset_index().sort_values('total_sales_rp')
         fig_bar = px.bar(
             df_prod, 
@@ -114,21 +116,20 @@ if not df_riil.empty:
         fig_bar.update_layout(xaxis_title="Total Nilai (Rp)", yaxis_title="", margin=dict(t=20, b=20))
         st.plotly_chart(fig_bar, use_container_width=True)
 
-    # --- BAGIAN TABEL DATA ---
-    with st.expander("🔍 Lihat Detail Data Transaksi (Amanah & Transparan)"):
-        # Menampilkan data sesuai prinsip akuntabilitas dalam Akuntansi Syariah [cite: 204]
+    # --- TABEL DETAIL ---
+    with st.expander("🔍 Lihat Detail Data (Transparansi & Akuntabilitas)"):
         st.dataframe(
             df_riil[['product_name', 'category', 'region', 'quantity', 'total_sales_rp']], 
             use_container_width=True
         )
 
 else:
-    # Tampilan jika data masih kosong
+    # Tampilan Error sesuai Screenshot 408 / image_519eb0.png
     st.error("⚠️ Grafik tidak dapat ditampilkan karena data tidak terbaca.")
-    st.info("💡 Pastikan tabel 'amdk_sales' di Supabase sudah berisi data Jawa Timur, Bali, DKI Jakarta, dll.")
+    st.info("💡 Pastikan tabel 'amdk_sales' di Supabase sudah berisi data Jawa Timur, Bali, dki_jakarta, dsb.")
     
     if st.button("Segarkan Koneksi"):
         st.cache_data.clear()
         st.rerun()
 
-st.caption("Monitoring Keuangan Real-time untuk Mendukung Kemandirian Ekonomi Home Industry.")
+st.caption("Monitoring Keuangan Real-time untuk mendukung kemandirian ekonomi Home Industry.")
