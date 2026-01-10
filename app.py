@@ -75,7 +75,7 @@ else:
         'transaction_date': pd.to_datetime(['2025-10-01', '2025-11-01', '2025-12-01', '2026-01-01']),
         'total_sales_rp': [1200000, 1500000, 1300000, 1800000],
         'quantity': [120, 150, 130, 180],
-        'region': ['Wilayah A', 'Wilayah B', 'Wilayah A', 'Wilayah C'],
+        'region': ['Banten', 'Jawa Barat', 'Jawa Tengah', 'Jawa Timur'],
         'payment_method': ['Transfer', 'Tunai', 'Transfer', 'Transfer']
     })
     mode_status = "Simulation (DB Empty)"
