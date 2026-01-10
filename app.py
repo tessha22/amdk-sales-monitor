@@ -16,8 +16,11 @@ st.set_page_config(page_title="AMDK Analytics & Forecasting", page_icon="📈", 
 @st.cache_resource
 def init_connection():
     try:
-        url = os.environ.get("vejhntwveszqdjptgiua")
-        key = os.environ.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlamhudHd2ZXN6cWRqcHRnaXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNTA4NTUsImV4cCI6MjA4MTcyNjg1NX0.LiaMAVOLXmF2RU-qnNI2jzLypuKhcnb9LgMFC_uf-9E")
+        # PERBAIKAN DI SINI: 
+        # Jika Anda ingin memasukkan kunci langsung di kode (Hardcoded), jangan gunakan os.environ.get
+        url = "https://vejhntwveszqdjptgiua.supabase.co" # Pastikan format URL benar (tambahkan .supabase.co)
+        key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlamhudHd2ZXN6cWRqcHRnaXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNTA4NTUsImV4cCI6MjA4MTcyNjg1NX0.LiaMAVOLXmF2RU-qnNI2jzLypuKhcnb9LgMFC_uf-9E"
+        
         if not url or not key:
             st.error("Kredensial Supabase tidak ditemukan!")
             st.stop()
@@ -32,16 +35,21 @@ supabase = init_connection()
 @st.cache_data(ttl=600)
 def fetch_data():
     try:
+        # Mengambil data dari tabel amdk_sales
         response = supabase.table("amdk_sales").select("*").execute()
         df = pd.DataFrame(response.data)
-        if df.empty: return df
+        
+        if df.empty: 
+            return df
         
         # Preprocessing Tanggal & Uang
         df['transaksi_date'] = pd.to_datetime(df['transaksi_date'])
         df['total_sales'] = pd.to_numeric(df['total_sales'], errors='coerce')
-        # Kolom untuk ML Risiko (dari modul sebelumnya)
+        
+        # Kolom untuk ML Risiko
         for col in ['jumlah_tanggungan', 'plafon_kredit', 'status_lancar']:
-            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+            if col in df.columns: 
+                df[col] = pd.to_numeric(df[col], errors='coerce')
             
         return df.dropna(subset=['total_sales', 'transaksi_date'])
     except Exception as e:
@@ -65,9 +73,12 @@ if not df_raw.empty and 'status_lancar' in df_raw.columns:
             in_plafon = st.number_input("Plafon", min_value=0, value=1000000)
             if st.form_submit_button("Cek Risiko"):
                 res = model_risk.predict([[in_pendapatan, in_tanggungan, in_plafon]])
-                if res[0] == 1: st.sidebar.success("✅ Prediksi: LANCAR")
-                else: st.sidebar.error("⚠️ Prediksi: MACET")
-    except: st.sidebar.warning("Data risiko belum optimal.")
+                if res[0] == 1: 
+                    st.sidebar.success("✅ Prediksi: LANCAR")
+                else: 
+                    st.sidebar.error("⚠️ Prediksi: MACET")
+    except: 
+        st.sidebar.warning("Data risiko belum optimal.")
 
 # ---------------------------------------------------------
 # 5. DASHBOARD UTAMA & FORECASTING (LINEAR REGRESSION)
@@ -106,7 +117,6 @@ if not df_raw.empty:
     with col_kpi2:
         st.metric("Jumlah Transaksi", f"{len(df_raw):,}")
     with col_forecast:
-        # Metric Card Besar untuk Proyeksi
         st.metric(
             label="🎯 Proyeksi Penjualan Bulan Depan", 
             value=f"Rp {projection_next_month:,.0f}",
@@ -116,26 +126,17 @@ if not df_raw.empty:
 
     st.markdown("---")
 
-    # E. Visualisasi Bar Chart + Trendline (Garis Regresi)
+    # E. Visualisasi Bar Chart + Trendline
     st.subheader("📊 Tren Penjualan & Garis Regresi")
-    
-    # Format label bulan
     df_monthly['Bulan'] = df_monthly['transaksi_date'].dt.strftime('%B %Y')
     
     fig = go.Figure()
-    
-    # Bar Chart (Data Riil)
     fig.add_trace(go.Bar(
-        x=df_monthly['Bulan'],
-        y=df_monthly['total_sales'],
-        name="Penjualan Riil",
-        marker_color='#3366CC'
+        x=df_monthly['Bulan'], y=df_monthly['total_sales'],
+        name="Penjualan Riil", marker_color='#3366CC'
     ))
-    
-    # Scatter/Line Chart (Garis Regresi/Trendline)
     fig.add_trace(go.Scatter(
-        x=df_monthly['Bulan'],
-        y=df_monthly['trend_line'],
+        x=df_monthly['Bulan'], y=df_monthly['trend_line'],
         name="Garis Tren (Linear Regression)",
         line=dict(color='red', width=3, dash='dash')
     ))
@@ -146,12 +147,10 @@ if not df_raw.empty:
         template="plotly_white",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
-    
     st.plotly_chart(fig, use_container_width=True)
 
     with st.expander("Lihat Data Peramalan"):
         st.write(df_monthly[['Bulan', 'total_sales', 'trend_line']])
-
 else:
     st.warning("Data tidak tersedia untuk melakukan peramalan.")
 
