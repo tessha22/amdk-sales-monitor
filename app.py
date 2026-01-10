@@ -6,10 +6,9 @@ import plotly.express as px
 from supabase import create_client, Client
 from datetime import datetime
 
-# 1. KONFIGURASI HALAMAN & TEMA VISUAL
+# 1. KONFIGURASI HALAMAN & TEMA (NAVY BLUE & SLATE GRAY)
 st.set_page_config(page_title="AMDK Sales Analytics Pro", page_icon="📊", layout="wide")
 
-# Styling agar tampilan lebih profesional (Navy Blue & Slate Gray)
 st.markdown("""
     <style>
     .main { background-color: #F4F6F7; }
@@ -37,8 +36,8 @@ def init_connection():
 
 supabase = init_connection()
 
-# 3. FUNGSI AMBIL DATA (Mapping Kolom Sesuai Screenshot 405)
-@st.cache_data(ttl=60)
+# 3. FUNGSI AMBIL DATA (Sesuai Skema Riil Screenshot 405)
+@st.cache_data(ttl=30)
 def fetch_real_data():
     if supabase is None: return pd.DataFrame()
     try:
@@ -47,33 +46,36 @@ def fetch_real_data():
         df = pd.DataFrame(response.data)
         
         if not df.empty:
-            # KONVERSI TIPE DATA NUMERIK (Agar grafik bisa dijumlahkan)
+            # PROTEKSI DATA: Konversi angka agar bisa dijumlahkan untuk grafik
+            # Ini sangat penting agar data seperti '1375000' tidak dianggap teks
             df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
-            df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
             df['total_sales_rp'] = pd.to_numeric(df['total_sales_rp'], errors='coerce')
+            df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
             
-            # Jika tabel tidak memiliki kolom tanggal, gunakan waktu sekarang untuk kebutuhan teknis sistem
+            # Membersihkan data dari nilai kosong (null) pada kolom krusial
+            df = df.dropna(subset=['region', 'total_sales_rp', 'product_name'])
+            
+            # Jika tabel tidak memiliki kolom tanggal, tambahkan waktu sekarang untuk sistem
             if 'transaction_date' not in df.columns:
                 df['transaction_date'] = datetime.now()
             
-            # Membersihkan baris yang datanya kosong pada kolom-kolom kunci
-            return df.dropna(subset=['region', 'total_sales_rp', 'product_name'])
+            return df
     except Exception as e:
-        st.error(f"Gagal memproses data: {e}")
+        st.error(f"Gagal memproses data database: {e}")
     return pd.DataFrame()
 
 df_riil = fetch_real_data()
 
 # 4. DASHBOARD UTAMA
 st.title("📊 Dashboard Analitik Penjualan AMDK")
-st.caption(f"Status: Live (Supabase Cloud) | Lokasi Riil di Database")
+st.caption(f"Status: Live (Supabase Cloud) | Update: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
 st.markdown("---")
 
 if not df_riil.empty:
     # --- BAGIAN KPI METRICS ---
     total_omzet = df_riil['total_sales_rp'].sum()
     total_unit = df_riil['quantity'].sum()
-    # Estimasi Profit berdasarkan data riil (Prinsip Hifz al-Mal)
+    # Estimasi Profit untuk Kesejahteraan Ekonomi Keluarga (Prinsip Hifz al-Mal)
     estimasi_profit = total_omzet * 0.20
 
     m1, m2, m3 = st.columns(3)
@@ -86,34 +88,34 @@ if not df_riil.empty:
 
     st.markdown("---")
 
-    # --- BAGIAN GRAFIK (Solusi untuk Masalah Screenshot Anda) ---
+    # --- BAGIAN GRAFIK ---
     col_left, col_right = st.columns([1, 1])
 
     with col_left:
         st.subheader("📍 Distribusi Penjualan per Wilayah")
-        # Donut Chart menggunakan kolom 'region' riil (Jawa Timur, Bali, dki_jakarta, dll)
+        # Grafik Donut untuk wilayah riil (Jawa Timur, Bali, Banten, dll)
         fig_pie = px.pie(
             df_riil, 
             values='total_sales_rp', 
             names='region', 
             hole=0.5,
-            color_discrete_sequence=px.colors.qualitative.Safe
+            color_discrete_sequence=px.colors.qualitative.Bold
         )
         fig_pie.update_layout(margin=dict(t=20, b=20, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with col_right:
-        st.subheader("📦 Performa Produk (Berdasarkan Omzet)")
-        # Bar Chart menggunakan kolom 'product_name' riil (Prima, Bisto, Cheers, dll)
+        st.subheader("📦 Performa Produk (Omzet)")
+        # Grafik Batang untuk produk riil (Prima, Cheers, Sega, dll)
         df_prod = df_riil.groupby('product_name')['total_sales_rp'].sum().reset_index().sort_values('total_sales_rp')
         fig_bar = px.bar(
             df_prod, 
             x='total_sales_rp', 
             y='product_name', 
             orientation='h',
-            color_discrete_sequence=['#1B4F72'] # Biru Navy
+            color_discrete_sequence=['#1B4F72']
         )
-        fig_bar.update_layout(xaxis_title="Total Nilai (Rp)", yaxis_title="", margin=dict(t=20, b=20))
+        fig_bar.update_layout(xaxis_title="Total Nilai (Rp)", yaxis_title="")
         st.plotly_chart(fig_bar, use_container_width=True)
 
     # --- TABEL DETAIL ---
@@ -124,9 +126,9 @@ if not df_riil.empty:
         )
 
 else:
-    # Tampilan Error sesuai Screenshot 408 / 409
-    st.error("⚠️ Grafik tidak dapat ditampilkan karena data tidak terbaca.")
-    st.info("💡 Pastikan tabel 'amdk_sales' di Supabase sudah berisi data wilayah riil.")
+    # Tampilan jika data masih gagal divalidasi (Seperti Screenshot 410)
+    st.error("⚠️ Data tidak terbaca dari Supabase.")
+    st.info("💡 Solusi: Pastikan tabel 'amdk_sales' sudah terisi data provinsi riil. Sistem mencari kolom: product_name, region, quantity, dan total_sales_rp.")
     
     if st.button("Segarkan Koneksi"):
         st.cache_data.clear()
