@@ -27,7 +27,7 @@ st.markdown("""
 @st.cache_resource
 def init_connection():
     try:
-        # Menggunakan URL dan Key dari project vejhntwveszqdjptgiua
+        # Menggunakan kredensial project vejhntwveszqdjptgiua
         url = "https://vejhntwveszqdjptgiua.supabase.co"
         key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlamhudHd2ZXN6cWRqcHRnaXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNTA4NTUsImV4cCI6MjA4MTcyNjg1NX0.LiaMAVOLXmF2RU-qnNI2jzLypuKhcnb9LgMFC_uf-9E"
         return create_client(url, key)
@@ -46,17 +46,16 @@ def fetch_real_data():
         df = pd.DataFrame(response.data)
         
         if not df.empty:
-            # KONVERSI TIPE DATA SESUAI SKEMA RIIL ANDA
-            # Memastikan kolom numerik terbaca sebagai angka untuk perhitungan SUM
+            # KONVERSI TIPE DATA SESUAI SKEMA RIIL (Screenshot 405)
+            # Kolom-kolom ini harus ada di database agar tidak error
             df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
             df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
             df['total_sales_rp'] = pd.to_numeric(df['total_sales_rp'], errors='coerce')
             
-            # Jika kolom tanggal belum tersedia, gunakan placeholder waktu sekarang
-            # agar visualisasi tren tidak error
+            # Jika kolom tanggal belum ada, gunakan waktu sekarang untuk keperluan teknis
             df['transaction_date'] = datetime.now()
             
-            return df.dropna(subset=['region', 'total_sales_rp'])
+            return df.dropna(subset=['region', 'total_sales_rp', 'product_name'])
     except Exception as e:
         st.error(f"Gagal memproses data: {e}")
     return pd.DataFrame()
@@ -72,7 +71,7 @@ if not df_riil.empty:
     # A. KPI METRICS (Layout Baris Atas)
     total_omzet = df_riil['total_sales_rp'].sum()
     total_unit = df_riil['quantity'].sum()
-    # Menghitung Estimasi Laba (Prinsip Hifz al-Mal)
+    # Estimasi Profit berdasarkan data riil
     estimasi_profit = total_omzet * 0.20
 
     m1, m2, m3 = st.columns(3)
@@ -111,9 +110,10 @@ if not df_riil.empty:
                      use_container_width=True)
 
 else:
-    # Tampilan jika data masih gagal terbaca (Pesan pada Screenshot 407)
+    # Tampilan jika data masih gagal terbaca (Pesan pada Screenshot 408)
     st.error("⚠️ Data tidak terbaca dari Supabase.")
-    st.info("💡 Pastikan tabel 'amdk_sales' sudah berisi data dengan kolom: product_name, region, quantity, dan total_sales_rp.")
+    st.info("💡 Solusi: Pastikan tabel 'amdk_sales' sudah terisi. Kode ini mencari kolom: product_name, region, quantity, dan total_sales_rp.")
+    
     if st.button("Segarkan Koneksi"):
         st.cache_data.clear()
         st.rerun()
