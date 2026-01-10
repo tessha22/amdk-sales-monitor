@@ -6,7 +6,7 @@ import plotly.express as px
 from supabase import create_client, Client
 from datetime import datetime
 
-# 1. KONFIGURASI HALAMAN & TEMA (NAVY BLUE & SLATE GRAY)
+# 1. KONFIGURASI HALAMAN & TEMA VISUAL
 st.set_page_config(page_title="AMDK Sales Analytics Pro", page_icon="📊", layout="wide")
 
 st.markdown("""
@@ -23,11 +23,10 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. KONEKSI SUPABASE
+# 2. KONEKSI SUPABASE (Pastikan URL & Key sudah benar)
 @st.cache_resource
 def init_connection():
     try:
-        # Menggunakan kredensial project vejhntwveszqdjptgiua
         url = "https://vejhntwveszqdjptgiua.supabase.co"
         key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlamhudHd2ZXN6cWRqcHRnaXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNTA4NTUsImV4cCI6MjA4MTcyNjg1NX0.LiaMAVOLXmF2RU-qnNI2jzLypuKhcnb9LgMFC_uf-9E"
         return create_client(url, key)
@@ -36,7 +35,7 @@ def init_connection():
 
 supabase = init_connection()
 
-# 3. FUNGSI AMBIL DATA (Sesuai Skema Riil Screenshot 405)
+# 3. FUNGSI AMBIL DATA (Mapping Kolom Sesuai Screenshot 405)
 @st.cache_data(ttl=30)
 def fetch_real_data():
     if supabase is None: return pd.DataFrame()
@@ -47,7 +46,6 @@ def fetch_real_data():
         
         if not df.empty:
             # PROTEKSI DATA: Konversi angka agar bisa dijumlahkan untuk grafik
-            # Ini sangat penting agar data seperti '1375000' tidak dianggap teks
             df['quantity'] = pd.to_numeric(df['quantity'], errors='coerce')
             df['total_sales_rp'] = pd.to_numeric(df['total_sales_rp'], errors='coerce')
             df['unit_price'] = pd.to_numeric(df['unit_price'], errors='coerce')
@@ -55,7 +53,7 @@ def fetch_real_data():
             # Membersihkan data dari nilai kosong (null) pada kolom krusial
             df = df.dropna(subset=['region', 'total_sales_rp', 'product_name'])
             
-            # Jika tabel tidak memiliki kolom tanggal, tambahkan waktu sekarang untuk sistem
+            # Placeholder tanggal jika kolom transaction_date tidak ditemukan
             if 'transaction_date' not in df.columns:
                 df['transaction_date'] = datetime.now()
             
@@ -75,7 +73,7 @@ if not df_riil.empty:
     # --- BAGIAN KPI METRICS ---
     total_omzet = df_riil['total_sales_rp'].sum()
     total_unit = df_riil['quantity'].sum()
-    # Estimasi Profit untuk Kesejahteraan Ekonomi Keluarga (Prinsip Hifz al-Mal)
+    # Perhitungan Estimasi Laba untuk Kesejahteraan Ekonomi Keluarga (Prinsip Hifz al-Mal)
     estimasi_profit = total_omzet * 0.20
 
     m1, m2, m3 = st.columns(3)
@@ -124,9 +122,7 @@ if not df_riil.empty:
             df_riil[['product_name', 'category', 'region', 'quantity', 'total_sales_rp']], 
             use_container_width=True
         )
-
 else:
-    # Tampilan jika data masih gagal divalidasi (Seperti Screenshot 410)
     st.error("⚠️ Data tidak terbaca dari Supabase.")
     st.info("💡 Solusi: Pastikan tabel 'amdk_sales' sudah terisi data provinsi riil. Sistem mencari kolom: product_name, region, quantity, dan total_sales_rp.")
     
