@@ -1,147 +1,158 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 from supabase import create_client, Client
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
+from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeClassifier
 
 # 1. KONFIGURASI HALAMAN
-st.set_page_config(
-    page_title="AMDK Sales Dashboard",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="AMDK Analytics & Forecasting", page_icon="📈", layout="wide")
 
-# 2. KONEKSI SUPABASE (Secure via os.environ)
+# 2. KONEKSI SUPABASE
 @st.cache_resource
 def init_connection():
     try:
-        url = os.environ.get("SUPABASE_URL")
-        key = os.environ.get("SUPABASE_KEY")
+        url = os.environ.get("vejhntwveszqdjptgiua")
+        key = os.environ.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZlamhudHd2ZXN6cWRqcHRnaXVhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYxNTA4NTUsImV4cCI6MjA4MTcyNjg1NX0.LiaMAVOLXmF2RU-qnNI2jzLypuKhcnb9LgMFC_uf-9E")
         if not url or not key:
-            st.error("Environment variables SUPABASE_URL dan SUPABASE_KEY tidak ditemukan!")
+            st.error("Kredensial Supabase tidak ditemukan!")
             st.stop()
         return create_client(url, key)
     except Exception as e:
-        st.error(f"Gagal menghubungkan ke Supabase: {e}")
+        st.error(f"Gagal koneksi: {e}")
         return None
 
 supabase = init_connection()
 
-# 3. FUNGSI AMBIL DATA
-@st.cache_data(ttl=600)  # Cache data selama 10 menit
+# 3. AMBIL DATA
+@st.cache_data(ttl=600)
 def fetch_data():
     try:
-        # Mengambil data dari tabel amdk_sales
         response = supabase.table("amdk_sales").select("*").execute()
         df = pd.DataFrame(response.data)
+        if df.empty: return df
         
-        if df.empty:
-            return df
-
-        # Preprocessing Data
+        # Preprocessing Tanggal & Uang
         df['transaksi_date'] = pd.to_datetime(df['transaksi_date'])
-        df['total_sales'] = pd.to_numeric(df['total_sales'])
-        df['quantity'] = pd.to_numeric(df['quantity'])
-        return df
+        df['total_sales'] = pd.to_numeric(df['total_sales'], errors='coerce')
+        # Kolom untuk ML Risiko (dari modul sebelumnya)
+        for col in ['jumlah_tanggungan', 'plafon_kredit', 'status_lancar']:
+            if col in df.columns: df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+        return df.dropna(subset=['total_sales', 'transaksi_date'])
     except Exception as e:
-        st.error(f"Terjadi kesalahan saat mengambil data: {e}")
+        st.error(f"Gagal ambil data: {e}")
         return pd.DataFrame()
 
-# Load Data
 df_raw = fetch_data()
 
-if df_raw.empty:
-    st.warning("Data tidak ditemukan atau tabel kosong.")
-    st.stop()
+# 4. SIDEBAR: RISIKO (DECISION TREE)
+st.sidebar.header("🤖 Simulasi Risiko Nasabah")
+if not df_raw.empty and 'status_lancar' in df_raw.columns:
+    try:
+        df_ml = df_raw.dropna(subset=['status_lancar', 'jumlah_tanggungan', 'plafon_kredit'])
+        X_risk = df_ml[['total_sales', 'jumlah_tanggungan', 'plafon_kredit']]
+        y_risk = df_ml['status_lancar']
+        model_risk = DecisionTreeClassifier(random_state=42).fit(X_risk, y_risk)
 
-# 4. SIDEBAR - FILTER
-st.sidebar.header("Filter Data")
+        with st.sidebar.form("risk_form"):
+            in_pendapatan = st.number_input("Pendapatan", min_value=0, value=5000000)
+            in_tanggungan = st.number_input("Tanggungan", min_value=0, value=2)
+            in_plafon = st.number_input("Plafon", min_value=0, value=1000000)
+            if st.form_submit_button("Cek Risiko"):
+                res = model_risk.predict([[in_pendapatan, in_tanggungan, in_plafon]])
+                if res[0] == 1: st.sidebar.success("✅ Prediksi: LANCAR")
+                else: st.sidebar.error("⚠️ Prediksi: MACET")
+    except: st.sidebar.warning("Data risiko belum optimal.")
 
-# Filter Region
-all_regions = df_raw['region'].unique().tolist()
-selected_region = st.sidebar.multiselect("Pilih Region", options=all_regions, default=all_regions)
-
-# Filter Rentang Total Sales
-min_sales = float(df_raw['total_sales'].min())
-max_sales = float(df_raw['total_sales'].max())
-sales_range = st.sidebar.slider(
-    "Rentang Total Sales",
-    min_value=min_sales,
-    max_value=max_sales,
-    value=(min_sales, max_sales)
-)
-
-# Apply Filter
-df_filtered = df_raw[
-    (df_raw['region'].isin(selected_region)) & 
-    (df_raw['total_sales'] >= sales_range[0]) & 
-    (df_raw['total_sales'] <= sales_range[1])
-]
-
-# 5. HEADER & KPI SECTION
-st.title("🥤 AMDK Sales Performance Dashboard")
+# ---------------------------------------------------------
+# 5. DASHBOARD UTAMA & FORECASTING (LINEAR REGRESSION)
+# ---------------------------------------------------------
+st.title("🥤 AMDK Sales Forecasting Dashboard")
 st.markdown("---")
 
-try:
-    total_sales_val = df_filtered['total_sales'].sum()
-    total_transactions = len(df_filtered)
-    avg_transaction = df_filtered['total_sales'].mean() if total_transactions > 0 else 0
+if not df_raw.empty:
+    # A. Persiapan Data Bulanan untuk Regresi
+    df_trend = df_raw.copy().set_index('transaksi_date')
+    df_monthly = df_trend.resample('ME')['total_sales'].sum().reset_index()
+    
+    # Konversi Tanggal ke Ordinal (Angka) untuk Scikit-Learn
+    df_monthly['date_ordinal'] = df_monthly['transaksi_date'].map(datetime.toordinal)
+    
+    X_time = df_monthly[['date_ordinal']].values
+    y_sales = df_monthly['total_sales'].values
+    
+    # B. Modelling Peramalan
+    model_lr = LinearRegression()
+    model_lr.fit(X_time, y_sales)
+    
+    # Prediksi untuk garis tren saat ini
+    df_monthly['trend_line'] = model_lr.predict(X_time)
+    
+    # C. Prediksi Masa Depan (Bulan Depan)
+    last_date = df_monthly['transaksi_date'].max()
+    next_month_date = (last_date + pd.DateOffset(months=1))
+    next_month_ordinal = np.array([[next_month_date.toordinal()]])
+    projection_next_month = model_lr.predict(next_month_ordinal)[0]
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Penjualan", f"Rp {total_sales_val:,.0f}")
-    with col2:
-        st.metric("Total Transaksi", f"{total_transactions:,}")
-    with col3:
-        st.metric("Rata-rata Nilai", f"Rp {avg_transaction:,.0f}")
-except Exception as e:
-    st.error(f"Error dalam kalkulasi KPI: {e}")
-
-st.markdown("---")
-
-# 6. VISUALISASI
-col_left, col_right = st.columns(2)
-
-with col_left:
-    st.subheader("Tren Penjualan Bulanan")
-    try:
-        # Resample data ke bulanan
-        df_trend = df_filtered.copy()
-        df_trend.set_index('transaksi_date', inplace=True)
-        df_monthly = df_trend.resample('M')['total_sales'].sum().reset_index()
-        df_monthly['transaksi_date'] = df_monthly['transaksi_date'].dt.strftime('%B %Y')
-
-        fig_bar = px.bar(
-            df_monthly, 
-            x='transaksi_date', 
-            y='total_sales',
-            labels={'total_sales': 'Total Penjualan', 'transaksi_date': 'Bulan'},
-            color_discrete_sequence=['#3366CC']
+    # D. Tampilan Metric
+    col_kpi1, col_kpi2, col_forecast = st.columns([1, 1, 2])
+    with col_kpi1:
+        st.metric("Total Penjualan", f"Rp {df_raw['total_sales'].sum():,.0f}")
+    with col_kpi2:
+        st.metric("Jumlah Transaksi", f"{len(df_raw):,}")
+    with col_forecast:
+        # Metric Card Besar untuk Proyeksi
+        st.metric(
+            label="🎯 Proyeksi Penjualan Bulan Depan", 
+            value=f"Rp {projection_next_month:,.0f}",
+            delta=f"{(projection_next_month - y_sales[-1]):,.0f} dari bulan terakhir",
+            delta_color="normal"
         )
-        fig_bar.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig_bar, use_container_width=True)
-    except Exception as e:
-        st.error(f"Gagal memuat grafik tren: {e}")
 
-with col_right:
-    st.subheader("Komposisi Penjualan per Region")
-    try:
-        fig_pie = px.pie(
-            df_filtered, 
-            values='total_sales', 
-            names='region',
-            hole=0.4,
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_pie, use_container_width=True)
-    except Exception as e:
-        st.error(f"Gagal memuat grafik region: {e}")
+    st.markdown("---")
 
-# 7. DATA PREVIEW (Opsional)
-with st.expander("Lihat Detail Data Terfilter"):
-    st.dataframe(df_filtered.sort_values(by='transaksi_date', ascending=False), use_container_width=True)
+    # E. Visualisasi Bar Chart + Trendline (Garis Regresi)
+    st.subheader("📊 Tren Penjualan & Garis Regresi")
+    
+    # Format label bulan
+    df_monthly['Bulan'] = df_monthly['transaksi_date'].dt.strftime('%B %Y')
+    
+    fig = go.Figure()
+    
+    # Bar Chart (Data Riil)
+    fig.add_trace(go.Bar(
+        x=df_monthly['Bulan'],
+        y=df_monthly['total_sales'],
+        name="Penjualan Riil",
+        marker_color='#3366CC'
+    ))
+    
+    # Scatter/Line Chart (Garis Regresi/Trendline)
+    fig.add_trace(go.Scatter(
+        x=df_monthly['Bulan'],
+        y=df_monthly['trend_line'],
+        name="Garis Tren (Linear Regression)",
+        line=dict(color='red', width=3, dash='dash')
+    ))
 
-# Footer
-st.caption(f"Terakhir diperbarui: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    fig.update_layout(
+        xaxis_tickangle=-45,
+        hovermode="x unified",
+        template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("Lihat Data Peramalan"):
+        st.write(df_monthly[['Bulan', 'total_sales', 'trend_line']])
+
+else:
+    st.warning("Data tidak tersedia untuk melakukan peramalan.")
+
+st.caption(f"Update: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
