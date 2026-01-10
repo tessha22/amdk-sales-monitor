@@ -7,14 +7,22 @@ from supabase import create_client, Client
 from datetime import datetime
 from sklearn.linear_model import LinearRegression
 
-# 1. KONFIGURASI HALAMAN & THEME
-st.set_page_config(page_title="AMDK Sales Analytics Pro", page_icon="🥤", layout="wide")
+# 1. KONFIGURASI HALAMAN & THEME (WARNA BIRU & ABU-ABU)
+st.set_page_config(page_title="AMDK Analytics Dashboard", page_icon="📊", layout="wide")
 
-# Custom CSS untuk mempercantik tampilan card
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    /* Mengatur latar belakang dan font */
+    .main { background-color: #F0F2F6; }
+    .stMetric { 
+        background-color: #FFFFFF; 
+        padding: 20px; 
+        border-radius: 12px; 
+        border-left: 5px solid #1B4F72; /* Biru Navy */
+        box-shadow: 2px 4px 15px rgba(0,0,0,0.05); 
+    }
+    h1, h2, h3 { color: #2C3E50; font-family: 'Segoe UI', sans-serif; }
+    div[data-testid="stSidebarNav"] { background-color: #E5E8E8; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -46,84 +54,102 @@ def fetch_data():
 
 df_raw = fetch_data()
 
-# 4. LOGIKA DATA (RIIL VS SIMULASI)
+# 4. FITUR PENDUKUNG: DATA SIMULASI (Jika DB Kosong) & SIDEBAR FILTER
 if df_raw.empty:
-    st.sidebar.warning("Menggunakan Data Simulasi")
     chart_data = pd.DataFrame({
-        'transaction_date': pd.to_datetime(['2025-10-01', '2025-11-01', '2025-12-01', '2026-01-01']),
-        'total_sales_rp': [1200000, 1500000, 1300000, 1800000],
-        'quantity': [120, 150, 130, 185],
-        'region': ['Bogor', 'Jakarta', 'Bogor', 'Ciomas']
+        'transaction_date': pd.to_datetime(['2025-09-01', '2025-10-01', '2025-11-01', '2025-12-01', '2026-01-01']),
+        'total_sales_rp': [1100000, 1250000, 1500000, 1350000, 1900000],
+        'quantity': [110, 125, 155, 140, 195],
+        'region': ['Bogor', 'Jakarta', 'Bogor', 'Tangerang', 'Ciomas'],
+        'payment_method': ['Tunai', 'Transfer', 'Tunai', 'Transfer', 'Transfer']
     })
 else:
     chart_data = df_raw.copy()
 
-# 5. HEADER DASHBOARD
-st.title("📊 AMDK Executive Sales Dashboard")
-st.caption(f"Sinkronisasi Terakhir: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+# Sidebar: Filter Rentang Waktu
+st.sidebar.title("⚙️ Kontrol Panel")
+date_range = st.sidebar.date_input("Filter Periode", 
+                                  [chart_data['transaction_date'].min(), chart_data['transaction_date'].max()])
+
+# 5. HEADER (AKUNTANSI SYARIAH CONTEXT)
+# Mencerminkan prinsip Amanah dalam pelaporan keuangan [cite: 147, 184]
+st.title("🥤 AMDK Sales & Forecasting Intelligence")
+st.caption(f"Data Akurat untuk Mendukung Kesejahteraan Ekonomi Keluarga | {datetime.now().strftime('%d/%m/%Y')}")
 st.markdown("---")
 
-# 6. KPI METRICS (Layout Baris Pertama)
+# 6. KPI METRICS (DENGAN AKSEN BIRU & ABU)
 df_monthly = chart_data.set_index('transaction_date').resample('ME').sum(numeric_only=True).reset_index()
 
-col_a, col_b, col_c, col_d = st.columns(4)
-with col_a:
-    st.metric("Total Penjualan", f"Rp {chart_data['total_sales_rp'].sum():,.0f}")
-with col_b:
-    st.metric("Total Produk Terjual", f"{chart_data['quantity'].sum():,} unit")
-with col_c:
-    avg_sales = chart_data['total_sales_rp'].mean()
-    st.metric("Rata-rata Transaksi", f"Rp {avg_sales:,.0f}")
-with col_d:
-    # Peramalan (Linear Regression tetap dipertahankan)
+m1, m2, m3, m4 = st.columns(4)
+with m1:
+    st.metric("Total Omzet", f"Rp {chart_data['total_sales_rp'].sum():,.0f}")
+with m2:
+    st.metric("Unit Terjual", f"{chart_data['quantity'].sum():,} Pcs")
+with m3:
+    # Estimasi Profitability (Simulasi 20% margin) - Prinsip Hifz al-Mal 
+    profit_est = chart_data['total_sales_rp'].sum() * 0.20
+    st.metric("Estimasi Profit (20%)", f"Rp {profit_est:,.0f}")
+with m4:
     if len(df_monthly) >= 2:
         df_monthly['date_ordinal'] = df_monthly['transaction_date'].map(datetime.toordinal)
         model = LinearRegression().fit(df_monthly[['date_ordinal']], df_monthly['total_sales_rp'])
         next_date = df_monthly['transaction_date'].max() + pd.DateOffset(months=1)
         prediction = model.predict([[next_date.toordinal()]])[0]
-        st.metric("Proyeksi Bulan Depan", f"Rp {prediction:,.0f}", delta="Prediksi Pertumbuhan")
+        st.metric("Target Bulan Depan", f"Rp {prediction:,.0f}")
     else:
-        st.metric("Proyeksi", "Data Minim")
+        st.metric("Target", "N/A")
 
-st.markdown("### 📈 Analisis Performa")
+# 7. VISUALISASI UTAMA (PERPADUAN BIRU & ABU-ABU)
+st.markdown("### 📈 Analisis Tren & Prediksi")
+c_left, c_right = st.columns([2, 1])
 
-# 7. GRAFIK UTAMA (Layout Dua Kolom)
-col_left, col_right = st.columns([2, 1])
-
-with col_left:
-    st.subheader("Tren Penjualan & Garis Regresi")
+with c_left:
+    # Bar Chart Performa Bulanan
+    fig_main = go.Figure()
+    fig_main.add_trace(go.Bar(
+        x=df_monthly['transaction_date'].dt.strftime('%b %Y'),
+        y=df_monthly['total_sales_rp'],
+        name="Pendapatan",
+        marker_color='#1B4F72' # Biru Navy
+    ))
     if len(df_monthly) >= 2:
         df_monthly['trend'] = model.predict(df_monthly[['date_ordinal']])
-        fig_main = go.Figure()
-        fig_main.add_trace(go.Bar(x=df_monthly['transaction_date'].dt.strftime('%b %Y'), 
-                                 y=df_monthly['total_sales_rp'], name="Penjualan Riil", marker_color='#1f77b4'))
-        fig_main.add_trace(go.Scatter(x=df_monthly['transaction_date'].dt.strftime('%b %Y'), 
-                                     y=df_monthly['trend'], name="Garis Tren", line=dict(color='red', width=3, dash='dash')))
-        fig_main.update_layout(height=400, margin=dict(l=20, r=20, t=20, b=20), hovermode="x unified")
-        st.plotly_chart(fig_main, use_container_width=True)
+        fig_main.add_trace(go.Scatter(
+            x=df_monthly['transaction_date'].dt.strftime('%b %Y'),
+            y=df_monthly['trend'],
+            name="Garis Pertumbuhan",
+            line=dict(color='#7F8C8D', width=3, dash='dot') # Abu-abu
+        ))
+    fig_main.update_layout(plot_bgcolor='rgba(0,0,0,0)', height=400)
+    st.plotly_chart(fig_main, use_container_width=True)
 
-with col_right:
-    st.subheader("Distribusi Penjualan per Wilayah")
-    fig_pie = px.pie(chart_data, values='total_sales_rp', names='region', hole=0.4,
-                     color_discrete_sequence=px.colors.qualitative.Pastel)
-    fig_pie.update_layout(height=400, margin=dict(l=20, r=20, t=20, b=20))
+with c_right:
+    # Donut Chart Wilayah
+    fig_pie = px.pie(chart_data, values='total_sales_rp', names='region', hole=0.5,
+                     color_discrete_sequence=['#1B4F72', '#2E86C1', '#5D6D7E', '#AEB6BF'])
+    fig_pie.update_layout(showlegend=True, height=400)
     st.plotly_chart(fig_pie, use_container_width=True)
 
-# 8. GRAFIK TAMBAHAN (Layout Baris Bawah)
+# 8. FITUR PENDUKUNG TAMBAHAN
 st.markdown("---")
-col_bot1, col_bot2 = st.columns(2)
+b_left, b_right = st.columns(2)
 
-with col_bot1:
-    st.subheader("Volume Produk Terjual per Bulan")
-    fig_qty = px.line(df_monthly, x='transaction_date', y='quantity', markers=True,
-                      labels={'quantity': 'Unit', 'transaction_date': 'Bulan'})
-    fig_qty.update_traces(line_color='#2ca02c')
-    st.plotly_chart(fig_qty, use_container_width=True)
+with b_left:
+    st.subheader("💳 Metode Pembayaran")
+    # Memastikan transparansi dalam transaksi (Amanah) 
+    fig_pay = px.bar(chart_data.groupby('payment_method')['total_sales_rp'].sum().reset_index(),
+                     x='total_sales_rp', y='payment_method', orientation='h',
+                     color_discrete_sequence=['#2E86C1'])
+    fig_pay.update_layout(xaxis_title="Total (Rp)", yaxis_title="")
+    st.plotly_chart(fig_pay, use_container_width=True)
 
-with col_bot2:
-    st.subheader("Detail Transaksi Terakhir")
-    st.dataframe(chart_data.sort_values('transaction_date', ascending=False).head(10), use_container_width=True)
+with b_right:
+    st.subheader("📋 Log Transaksi Terbaru")
+    # Menampilkan data mentah untuk audit internal sesuai Akuntansi Syariah [cite: 20, 125]
+    st.dataframe(chart_data[['transaction_date', 'region', 'quantity', 'total_sales_rp']]
+                 .sort_values('transaction_date', ascending=False).head(8), 
+                 use_container_width=True)
 
-# Footer info
-if df_raw.empty:
-    st.info("💡 Tips: Masukkan data ke tabel 'amdk_sales' di Supabase untuk menggantikan data simulasi ini.")
+# Status Koneksi di Sidebar
+st.sidebar.markdown("---")
+st.sidebar.info(f"Database: Connected\nMode: {'Live' if not df_raw.empty else 'Simulation'}")
